@@ -48,3 +48,52 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download JAR Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: target/
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SPRING_APP_SSH_KEY }}
+      - name: Create SSH config file
+        run: |
+          mkdir -p ~/.ssh
+          cat > ~/.ssh/config << 'EOL'
+            Host bastion
+                HostName ${{ secrets.SPRING_APP_BASTION_HOST }}
+                User ${{ secrets.SPRING_APP_BASTION_USER }}
+            
+            Host web1
+                HostName ${{ secrets.SPRING_APP_WEB1_HOST }}
+                User ${{ secrets.SPRING_APP_WEB1_USER }}
+                ProxyCommand ssh -W %h:%p bastion
+            
+            Host web2
+                HostName ${{ secrets.SPRING_APP_WEB2_HOST }}
+                User ${{ secrets.SPRING_APP_WEB2_USER }}
+                ProxyCommand ssh -W %h:%p bastion
+          EOL
+          chmod 600 ~/.ssh/config
+      - name: Setup known_hosts
+        run: |
+          ssh-keyscan ${{ secrets.SPRING_APP_BASTION_HOST }} >> ~/.ssh/known_hosts
+          ssh bastion "ssh-keyscan -H ${{ secrets.SPRING_APP_WEB1_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh bastion "ssh-keyscan -H ${{ secrets.SPRING_APP_WEB2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Deploy to EC2
+        run: |
+          scp target/demo-0.0.1-SNAPSHOT.jar web1:~/app/app.jar
+          scp target/demo-0.0.1-SNAPSHOT.jar web2:~/app/app.jar
+      - name: Start Application
+        run: |
+          ssh web1 << 'ENDSSH1'
+            sudo systemctl restart qiita-spring-ec2-app
+            sudo systemctl status qiita-spring-ec2-app --no-pager
+          ENDSSH1
+          ssh web2 << 'ENDSSH2'
+            sudo systemctl restart qiita-spring-ec2-app
+            sudo systemctl status qiita-spring-ec2-app --no-pager
+          ENDSSH2
