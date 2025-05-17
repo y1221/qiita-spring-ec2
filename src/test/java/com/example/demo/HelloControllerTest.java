@@ -13,9 +13,9 @@ public class HelloControllerTest {
     private MockMvc mockMvc;
 
     @Test
-    public void indexShouldReturnIncorrectViewName() throws Exception {
+    public void indexShouldReturnCorrectViewName() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.get(""))
                 .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.view().name("wrong"));
+                .andExpect(MockMvcResultMatchers.view().name("hello"));
     }
 }
